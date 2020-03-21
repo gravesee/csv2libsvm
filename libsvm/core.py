@@ -8,17 +8,17 @@ import numpy as np
 import seaborn as sns
 import pprint
 
+MAX_UNIQ = 32
 
 def match(x, table):
-    res = np.zeros_like(table)
+    res = np.full_like(table, 0)
     f = pd.isna(table)
     
     if np.all(f):
         return res
     else:
         res[~f] = np.nonzero(x == table[~f, None])[1]
-        return res
-
+        return res    
 
 class Spec(JSONEncoder):
     def __init__(self, dtype=None, values=None, **kwargs):
@@ -73,8 +73,14 @@ def get_conversion_dict(chunker: Iterable[pd.DataFrame]) -> DefaultDict[str, Spe
     for chunk in chunker:
 
         for k, v in chunk.iteritems():
+            if isinstance(v.dtype, pd.CategoricalDtype):
+                v = v.astype(str)
+
             if v.dtype == "O":
-                dtypes[k] += Spec(v.dtype, v.unique())
+                uniq = {x for x in v.unique() if x is not np.nan}
+                if len(uniq) > MAX_UNIQ:
+                    continue
+                dtypes[k] += Spec(v.dtype, uniq)
             else:
                 dtypes[k] += Spec(v.dtype, set())
     return dtypes
@@ -102,6 +108,7 @@ def csv_to_libsvm(
     infile: str,
     outfile: str,
     target: str,
+    weight: Optional[str] = None,
     chunksize: Optional[int] = None,
     dtypes_path: Optional[str] = None,
     **kwargs,
@@ -114,6 +121,8 @@ def csv_to_libsvm(
     else:
         with open(dtypes_path, "r") as json_in:
             dtypes = json.load(json_in, object_hook=Spec.object_hook)
+    
+    pprint.pprint(dtypes)
 
     # chunk over the file and write it out
     chunker = pd.read_csv(infile, chunksize=chunksize, **kwargs)
@@ -125,11 +134,15 @@ def csv_to_libsvm(
         for chunk in chunker:
             converted = apply_dtypes(chunk, dtypes)
 
-            cols = [converted[target].astype(str)]
-            for i, (k, v) in enumerate(converted.iteritems()):
-                if k != target:
-                    fmt = [f"{i + 1}:{x:g}" if x != 0 else "" for x in v.values]
-                    cols.append(fmt)
+            # target field is the first column
+            if weight is not None:
+                cols = [pd.Series([f"{y:g}:{w:g}" for y, w in zip(converted[target], converted[weight])])]
+            else:
+                cols = [converted[target].astype(str)]
+
+            for i, (k, v) in enumerate(dtypes.items()):
+                fmt = [f"{i + 1}:{x:g}" if x != 0 else "" for x in converted[k].values]
+                cols.append(fmt)
 
             libsvm.writelines(
                 [re.sub("\\s+", " ", " ".join(x)) + "\n" for x in zip(*cols)]
@@ -156,18 +169,19 @@ if __name__ == "__main__":
     # print(infer_dtypes_from_csv("libsvm/iris.csv", 10))
 
     # csv_to_libsvm("libsvm/iris.csv", "a.libsvm", "species", None)
-    csv_to_libsvm(
-        "C:\\Users\\gravesee\\AppData\\Local\\Temp\\000750fe-c488-4c27-bb1b-8309c976b0b5\\titanic.csv",
-        "titanic1.libsvm",
-        "survived",
-        10,
-    )
+    # csv_to_libsvm(
+    #     "C:\\Users\\gravesee\\AppData\\Local\\Temp\\000750fe-c488-4c27-bb1b-8309c976b0b5\\titanic.csv",
+    #     "titanic1.libsvm",
+    #     "survived",
+    #     None,
+    # )
 
     csv_to_libsvm(
-        "C:\\Users\\gravesee\\AppData\\Local\\Temp\\000750fe-c488-4c27-bb1b-8309c976b0b5\\titanic.csv",
-        "titanic2.libsvm",
-        "survived",
-        None,
-    )
+        "C:\\Projects\\r-dev\\xgboost_neutral\\data\\pt28_mkiv1_2_2.csv",
+        "pt28_mkiv1_2_2.libsvm",
+        "CFPB_Race_Estimate",
+        "bankcard_score",
+        50000,
+        nrows=100000
 
-    
+    )
