@@ -164,24 +164,12 @@ def iter_chunks(x: pd.DataFrame, chunk_size: int = None):
 
 
 if __name__ == "__main__":
-    ## test chunking and finding dtypes
-    # types = get_conversion_dict(iter_chunks(df, -1))
-    # print(infer_dtypes_from_csv("libsvm/iris.csv", 10))
-
-    # csv_to_libsvm("libsvm/iris.csv", "a.libsvm", "species", None)
-    # csv_to_libsvm(
-    #     "C:\\Users\\gravesee\\AppData\\Local\\Temp\\000750fe-c488-4c27-bb1b-8309c976b0b5\\titanic.csv",
-    #     "titanic1.libsvm",
-    #     "survived",
-    #     None,
-    # )
-
+    
     csv_to_libsvm(
-        "C:\\Projects\\r-dev\\xgboost_neutral\\data\\pt28_mkiv1_2_2.csv",
-        "pt28_mkiv1_2_2.libsvm",
-        "CFPB_Race_Estimate",
-        "bankcard_score",
-        50000,
-        nrows=100000
-
+        infile="C:\\Projects\\r-dev\\xgboost_neutral\\data\\pt28_mkiv1_2_2.csv",
+        outfile="pt28_mkiv1_2_2-part2.libsvm",
+        target="CFPB_Race_Estimate",
+        weight="bankcard_score",
+        chunksize=50000,
+        # dtypes_path="pt28_mkiv1_2_2.libsvm.meta"
     )
