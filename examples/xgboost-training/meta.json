@@ -1,0 +1,1 @@
+{"target": "survived", "weight": null, "factors": ["pclass", "sex", "embarked"], "converters": {}, "skip": [], "keep": ["pclass", "sex", "age", "sibsp", "parch", "fare", "embarked"], "na_strings": [""]}

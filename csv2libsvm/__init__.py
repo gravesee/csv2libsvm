@@ -1,1 +1,1 @@
-from .core import csv_to_libsvm
+from .core import csv2libsvm

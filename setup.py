@@ -18,5 +18,9 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
+    install_requires=[
+        "tqdm>=4.43.0"
+    ],
     python_requires='>=3.6',
+    entry_points={"console_scripts": ["csv2libsvm = csv2libsvm.cli:main"]}    
 )
