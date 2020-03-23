@@ -2,12 +2,14 @@ import csv
 from typing import Optional, List, Union, Dict
 import json
 from tqdm import tqdm
+import os
 
 Converter = Dict[str, str]
 
 
 class Incrementer(dict):
     """subclass of dict that increments values returned by new keys"""
+
     def __init__(self, data: Dict[str, str] = {}, locked=False):
         self.locked = locked
         self.update(data)
@@ -16,6 +18,16 @@ class Incrementer(dict):
         if self.locked:
             return 0
         self[key] = str(len(self) + 1)
+        return self[key]
+
+
+class OutputFileManager(dict):
+    def __init__(self, path: str):
+        self.path = path
+
+    def __missing__(self, key):
+        f = open(f"{self.path}/part-{key}.libsvm", "w")
+        self[key] = f
         return self[key]
 
 
@@ -70,17 +82,19 @@ def make_target_column(
 
 def csv_to_libsvm(
     infile: str,
-    outfile: str,
+    outpath: str,
     target: Optional[str] = None,
     weight: Optional[str] = None,
+    split: Optional[str] = None,
     factors: List[str] = [],
-    converters: Dict[str, Converter] = {},
     skip: List[str] = [],
+    keep: List[str] = [],
     na_strings=[""],
     nrows: Optional[int] = None,
     meta: Optional[str] = None,
     locked: bool = False,
     verbose: bool = True,
+    converters: Dict[str, Converter] = {},
 ):
     """Convert csv files to libsvm format
     
@@ -110,10 +124,13 @@ def csv_to_libsvm(
     if meta is not None:
         with open(meta, "r") as meta_in:
             opts = json.load(meta_in)
-            return csv_to_libsvm(infile, outfile, nrows=nrows, locked=True, **opts)
+            return csv_to_libsvm(infile, outpath, nrows=nrows, locked=True, **opts)
     else:
         if target is None:
             raise ValueError("target cannot be None if no metadata provided.")
+
+    if not os.path.exists(outpath):
+        os.mkdir(outpath)
 
     # if verbose=True, get a quick line count for tqdm
     if verbose:
@@ -122,22 +139,31 @@ def csv_to_libsvm(
     # create converters that will map factor column levels to integers
     convert = make_converters(factors, converters)
 
-    with open(infile, "r") as fin, open(outfile, "w") as fout:
+    skipcols = [target] + skip
+    if weight is not None:
+        skipcols += [weight]
+    if split is not None:
+        skipcols += [split]
+
+    fm = OutputFileManager(outpath)
+
+    with open(infile, "r") as fin:
 
         reader = csv.DictReader(fin)
+
+        if len(keep) > 0:
+            iter_cols = [k for k in keep if k not in skip]
+        else:
+            iter_cols = list(reader.fieldnames)
 
         for i, row in enumerate(tqdm(reader, total=lc)):
             # if target is in factors, need to replace value with incrementer
 
-            val = make_target_column(row, target, weight, factors, na_strings, convert)
-            fout.write(val)
-
-            skipcols = [target] + skip
-            if weight is not None:
-                skipcols += [weight]
+            out = make_target_column(row, target, weight, factors, na_strings, convert)
 
             pos = 1
-            for k, v in row.items():
+            for k in iter_cols:
+                v = row[k]
                 # if column is in skipcols, skip
                 if k in skipcols:
                     continue
@@ -147,24 +173,32 @@ def csv_to_libsvm(
                 else:
                     # if column is a factor, replace value with incrementer value
                     val = convert[k][v] if k in factors else v
-                    fout.write(f" {pos}:{val}")
+                    out += f" {pos}:{val}"
                 pos += 1
 
-            fout.write(f"\n")
+            out += f"\n"
+
+            if split is None:
+                fm["full"].write(out)
+            else:
+                fm[row[split]].write(out)
 
             if nrows is not None:
                 if i >= nrows - 1:
                     break
 
+    for f in fm.values():
+        f.close()
+
     if not locked:
-        with open(outfile + ".json", "w") as meta_out:
+        with open(outpath + "/meta.json", "w") as meta_out:
             info = {
                 "target": target,
                 "weight": weight,
                 "factors": factors,
                 "converters": converters,
                 "skip": skip,
-                # 'keep': [x for x in reader.fieldnames if x not in skipcols],
+                'keep': [x for x in reader.fieldnames if x not in skipcols],
                 "na_strings": na_strings,
             }
             json.dump(info, meta_out)
@@ -174,32 +208,15 @@ if __name__ == "__main__":
     # survived,pclass,sex,age,sibsp,parch,fare,embarked,class,who,adult_male,deck,embark_town,alive,alone
     csv_to_libsvm(
         "titanic.csv",
-        "titanic-libsvm.train",
+        "titanic",
         "survived",
-        factors=["pclass", "sex", "embarked"],
+        factors=["pclass" "embarked"],
+        # split="sex",
         skip=["class", "who", "adult_male", "deck", "embark_town", "alive", "alone"],
     )
 
-    # csv_to_libsvm(
-    #     infile="C:\\Projects\\r-dev\\xgboost_neutral\\data\\pt28_mkiv1_2_2.csv",
-    #     outfile="pt28_mkiv1_2_2-part2-dict.libsvm",
-    #     target="CFPB_Race_Estimate",
-    #     weight="bankcard_score",
-    #     factors=["CFPB_Race_Estimate", "customer"],
-    #     skip=["mergekey"],
-    #     # nrows=1947
-    # )
-
-    # csv_to_libsvm(
-    #     infile="libsvm/iris.csv",
-    #     outfile="iris.libsvm",
-    #     target="species",
-    #     factors=["species"]
-    # )
-
-    # csv_to_libsvm(
-    #     infile="C:\\Projects\\r-dev\\xgboost_neutral\\data\\pt28_mkiv1_2_2.csv",
-    #     outfile="pt28_mkiv1_2_2-part2.libsvm",
-    #     meta="pt28_mkiv1_2_2-part2.libsvm.json",
-
-    # )
+    csv_to_libsvm(
+        "titanic.csv",
+        "output_from_meta",
+        meta="titanic/meta.json"
+    )
