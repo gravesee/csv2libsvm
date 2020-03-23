@@ -1,10 +1,10 @@
-import csv
+from .util import line_count, Incrementer, RandomFileSplitter
 from typing import Optional, List, Union, Dict, Iterator, Tuple, TextIO, Mapping
-import json
 from tqdm import tqdm
+import csv
+import json
 import os
 import io
-from .util import line_count, Incrementer
 
 
 class OutputFileManager(dict):
@@ -44,7 +44,7 @@ def make_converters(
 def make_keepcols(
     target: str,
     weight: Optional[str],
-    split: Optional[str],
+    split: Optional[Union[str, Dict[str, float]]],
     skip: List[str],
     keep: List[str],
     reader: csv.DictReader,
@@ -55,7 +55,8 @@ def make_keepcols(
     if weight is not None:
         skipcols.append(weight)
     if split is not None:
-        skipcols.append(split)
+        if isinstance(split, str):
+            skipcols.append(split)
 
     keepcols = keep if len(keep) > 0 else reader.fieldnames
 
@@ -90,7 +91,7 @@ def csv2libsvm(
     outpath: str,
     target: Optional[str] = None,
     weight: Optional[str] = None,
-    split: Optional[str] = None,
+    split: Optional[Union[str, Dict[str, float]]] = None,
     factors: List[str] = [],
     skip: List[str] = [],
     keep: List[str] = [],
@@ -115,6 +116,13 @@ def csv2libsvm(
     # input output file initialization
     fin, lc = init_input(infile, nrows)
     fm = OutputFileManager(outpath)
+
+    # if split argument is dict of sample probs, create random file splitter
+    if split is not None:
+        if not isinstance(split, str):
+            rfs = RandomFileSplitter(split)
+    else:
+        rfs = RandomFileSplitter({})
 
     # create converters that will map factor column levels to integers
     converters = make_converters(factors, _converters)
@@ -146,8 +154,10 @@ def csv2libsvm(
 
         if split is None:
             fm["full"].write(out)
-        else:
+        elif isinstance(split, str):
             fm[row[split]].write(out)
+        else:
+            fm[rfs.random_file].write(out)
 
         if nrows is not None:
             if i >= nrows - 1:
@@ -172,15 +182,15 @@ def csv2libsvm(
             json.dump(info, meta_out)
 
 
-# if __name__ == "__main__":
-#     # survived,pclass,sex,age,sibsp,parch,fare,embarked,class,who,adult_male,deck,embark_town,alive,alone
-#     csv_to_libsvm(
-#         "titanic.csv",
-#         "titanic",
-#         "survived",
-#         factors=["pclass" "embarked"],
-#         # split="sex",
-#         skip=["class", "who", "adult_male", "deck", "embark_town", "alive", "alone"],
-#     )
+if __name__ == "__main__":
+    # survived,pclass,sex,age,sibsp,parch,fare,embarked,class,who,adult_male,deck,embark_town,alive,alone
+    csv2libsvm(
+        "titanic.csv",
+        "titanic",
+        "survived",
+        factors=["pclass" "embarked", "sex"],
+        split={"train": 50, "test": 50},
+        skip=["class", "who", "adult_male", "deck", "embark_town", "alive", "alone"],
+    )
 
-#     csv_to_libsvm("titanic.csv", "output_from_meta", meta="titanic/meta.json")
+#    csv_to_libsvm("titanic.csv", "output_from_meta", meta="titanic/meta.json")

@@ -1,6 +1,6 @@
 import pytest, io, csv, textwrap, tempfile
 from csv2libsvm.cli import main
-from csv2libsvm import csv_to_libsvm
+from csv2libsvm import csv2libsvm
 
 
 @pytest.fixture
@@ -23,7 +23,7 @@ def data_nas():
 
 
 def test_function_baseline(data):
-    csv_to_libsvm(
+    csv2libsvm(
         data,
         "tests/test_output",
         target="target",
@@ -38,7 +38,7 @@ def test_function_baseline(data):
         assert [x.strip() for x in val.readlines()] == ["0:1.5 1:1.00 2:2"]
 
 def test_function_missings(data_nas):
-    csv_to_libsvm(
+    csv2libsvm(
         data_nas,
         "tests/test_output",
         target="target",
@@ -53,7 +53,7 @@ def test_function_missings(data_nas):
         assert [x.strip() for x in val.readlines()] == ["0:1.5 1:1.00"]
 
 def test_function_no_weight(data):
-    csv_to_libsvm(
+    csv2libsvm(
         data,
         "tests/test_output",
         target="target",

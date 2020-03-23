@@ -1,6 +1,7 @@
 from csv2libsvm import csv2libsvm
 from optparse import OptionParser, OptionValueError, Option
 import copy
+import json
 
 
 def check_csv_str(option, opt, value):
@@ -9,11 +10,18 @@ def check_csv_str(option, opt, value):
     except ValueError:
         raise OptionValueError("option %s: invalid csv list value: %s" % (opt, value))
 
+def check_json(option, opt, value):
+    try:
+        return json.loads(value)
+    except ValueError:
+        raise OptionValueError("option %s: invalid json value: %s" % (opt, value))
+
 
 class MyOption(Option):
-    TYPES = Option.TYPES + ("csvlist",)
+    TYPES = Option.TYPES + ("csvlist", "json")
     TYPE_CHECKER = copy.copy(Option.TYPE_CHECKER)
     TYPE_CHECKER["csvlist"] = check_csv_str
+    TYPE_CHECKER["json"] = check_json
 
 
 parser = OptionParser(option_class=MyOption)  # type: ignore
@@ -29,6 +37,13 @@ parser.add_option(
 )
 parser.add_option(
     "-z", "--split", dest="split", help="string name of variable with dev/val, etc..."
+)
+parser.add_option(
+    "-p",
+    "--probs",
+    dest="split",
+    type="json",
+    help="json object of probs to create multiple output files",
 )
 parser.add_option(
     "-f",
