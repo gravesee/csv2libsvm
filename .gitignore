@@ -1,0 +1,4 @@
+.mypy_cache
+settings.json
+*.pyc
+tests/test_output
